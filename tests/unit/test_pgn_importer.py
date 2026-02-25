@@ -21,11 +21,11 @@ def test_simple_game_returns_one_line():
     assert len(lines) == 1
 
 
-def test_simple_game_moves_in_uci():
-    """Moves are returned as space-separated UCI tokens."""
+def test_simple_game_moves_in_san():
+    """Moves are returned as space-separated SAN tokens."""
     pgn = "1. e4 e5"
     lines = expand_pgn_variations(pgn)
-    assert lines[0].moves == "e2e4 e7e5"
+    assert lines[0].moves == "e4 e5"
 
 
 def test_simple_game_start_fen_is_standard():
@@ -113,12 +113,12 @@ def test_custom_start_fen_is_preserved():
     assert lines[0].start_fen == custom_fen
 
 
-def test_custom_start_fen_move_in_uci():
-    """Moves from a custom FEN position are still in UCI notation."""
+def test_custom_start_fen_move_in_san():
+    """Moves from a custom FEN position are in SAN notation."""
     custom_fen = "4k3/8/8/8/8/8/4P3/4K3 w - - 0 1"
     pgn = f'[FEN "{custom_fen}"]\n[SetUp "1"]\n\n1. e4 *'
     lines = expand_pgn_variations(pgn)
-    assert "e2e4" in lines[0].moves
+    assert "e4" in lines[0].moves
 
 
 # ---------------------------------------------------------------------------

@@ -150,7 +150,7 @@ async def test_register_line_unknown_theme_raises(db):
 @pytest.mark.asyncio
 async def test_register_line_invalid_moves_raises(db):
     """An illegal move must raise InvalidMoveError before any DB write."""
-    body = LineCreate(moves="e4 Nf6 GARBAGE", theme_id=1)
+    body = LineCreate(moves="e4 Nf3 GARBAGE", theme_id=1)
     with pytest.raises(InvalidMoveError):
         await register_line(db, body)
 

@@ -61,3 +61,18 @@ def apply_sm2(state: SM2State, grade: int) -> SM2State:
         repetitions=new_repetitions,
         ease_factor=round(new_ease, 4),
     )
+
+
+def apply_game_miss_decay(state: SM2State) -> SM2State:
+    """
+    Apply partial SM-2 decay after a real-game miss.
+
+    Instead of a full reset, interval is halved, repetitions decremented by 1,
+    and ease_factor slightly reduced. This avoids an avalanche of re-reviews
+    while still surfacing the block sooner.
+    """
+    return SM2State(
+        interval_days=max(1, state.interval_days // 2),
+        repetitions=max(0, state.repetitions - 1),
+        ease_factor=max(EASE_FACTOR_MIN, round(state.ease_factor - 0.1, 4)),
+    )

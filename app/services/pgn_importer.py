@@ -4,6 +4,7 @@ import io
 import logging
 from dataclasses import dataclass
 
+import chess
 import chess.pgn
 
 logger = logging.getLogger(__name__)
@@ -41,14 +42,18 @@ def expand_pgn_variations(pgn_text: str) -> list[LineData]:
     # Extract the starting FEN (or default to standard initial position)
     start_fen = game.headers.get("FEN", chess.STARTING_FEN)
 
-    # Recursively walk the game tree and collect all paths
+    # Recursively walk the game tree and collect all paths.
+    # We carry a chess.Board along so we can convert moves to SAN.
     def collect_paths(
-        node: chess.pgn.GameNode, current_moves: list[str]
+        node: chess.pgn.GameNode,
+        current_moves: list[str],
+        board: chess.Board,
     ) -> list[list[str]]:
         """
         Recursively extract all variation paths from a game node.
 
-        Returns a list of complete move sequences (main line + all branches).
+        Returns a list of complete move sequences in SAN notation
+        (main line + all branches).
         """
         paths: list[list[str]] = []
 
@@ -59,28 +64,39 @@ def expand_pgn_variations(pgn_text: str) -> list[LineData]:
             paths.append(current_moves)
             return paths
 
-        # Add the next move to the current path
+        # Add the next move to the current path (as SAN)
         if next_node.move is not None:
-            new_moves = current_moves + [next_node.move.uci()]
+            san = board.san(next_node.move)
+            new_moves = current_moves + [san]
+            next_board = board.copy()
+            next_board.push(next_node.move)
         else:
             new_moves = current_moves
+            next_board = board.copy()
 
         # Explore main line (the first variation)
-        paths.extend(collect_paths(next_node, new_moves))
+        paths.extend(collect_paths(next_node, new_moves, next_board))
 
         # Explore alternative variations (from index 1 onwards)
         for variation in node.variations[1:]:
             # Each variation starts from the current node, not from next_node
             if variation.move is not None:
-                var_moves = current_moves + [variation.move.uci()]
+                var_san = board.san(variation.move)
+                var_moves = current_moves + [var_san]
+                var_board = board.copy()
+                var_board.push(variation.move)
             else:
                 var_moves = current_moves
-            paths.extend(collect_paths(variation, var_moves))
+                var_board = board.copy()
+            paths.extend(collect_paths(variation, var_moves, var_board))
 
         return paths
 
+    # Build the starting board from start_fen
+    start_board = chess.Board(start_fen)
+
     # Start walking from the root (before any moves are played)
-    all_paths = collect_paths(game, [])
+    all_paths = collect_paths(game, [], start_board)
 
     # Convert each path to a LineData
     for path in all_paths:

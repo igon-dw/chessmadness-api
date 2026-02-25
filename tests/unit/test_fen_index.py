@@ -10,6 +10,7 @@ STANDARD_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
 
 
 def test_build_fen_index_length():
+    # SAN notation: e4 e5 Nf3 Nc6
     entries = build_fen_index(STANDARD_FEN, "e4 e5 Nf3 Nc6")
     # 4 moves → 5 entries (ply 0 through 4)
     assert len(entries) == 5
@@ -35,7 +36,7 @@ def test_build_fen_index_empty_moves():
 
 def test_invalid_move_raises():
     with pytest.raises(InvalidMoveError, match="Nf6"):
-        # Nf6 is a legal Black move but it's White's turn at ply 0
+        # Nf6 (Black knight) is illegal because it's White's turn at ply 0
         build_fen_index(STANDARD_FEN, "Nf6")
 
 

@@ -12,6 +12,7 @@ class ReviewItem(BaseModel):
     theme_name: str
     moves: str
     start_fen: str
+    final_fen: str
     note: str | None
     next_review: str | None
     interval_days: int

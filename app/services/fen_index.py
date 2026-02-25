@@ -12,6 +12,9 @@ def build_fen_index(start_fen: str, moves: str) -> list[dict[str, object]]:
     """
     Replay every move in *moves* from *start_fen* and return one dict per ply.
 
+    Moves may be provided in SAN or UCI format; they are stored as SAN in the
+    returned dicts (and therefore in the fen_index table).
+
     The returned list can be bulk-inserted into the fen_index table::
 
         [{"ply": 0, "fen": "...", "next_move": "e4"},
@@ -22,38 +25,79 @@ def build_fen_index(start_fen: str, moves: str) -> list[dict[str, object]]:
     Raises InvalidMoveError if any move is illegal or ambiguous.
     """
     board = chess.Board(start_fen)
-    move_list = moves.split() if moves.strip() else []
+    raw_list = moves.split() if moves.strip() else []
+    # Resolve all moves upfront so we can use SAN for next_move references
+    san_list: list[str] = []
+    move_objects: list[chess.Move] = []
+
+    for i, token in enumerate(raw_list):
+        try:
+            move = board.parse_san(token)
+            san = board.san(move)
+            san_list.append(san)
+            move_objects.append(move)
+            board.push(move)
+        except (
+            chess.InvalidMoveError,
+            chess.IllegalMoveError,
+            chess.AmbiguousMoveError,
+            ValueError,
+        ) as exc:
+            raise InvalidMoveError(
+                f"Invalid move at ply {i + 1}: '{token}' — {exc}"
+            ) from exc
+
+    # Build the index from scratch (board was advanced above — reset it)
+    board = chess.Board(start_fen)
     result: list[dict[str, object]] = []
 
     result.append(
         {
             "ply": 0,
             "fen": board.fen(),
-            "next_move": move_list[0] if move_list else None,
+            "next_move": san_list[0] if san_list else None,
         }
     )
 
-    for i, san in enumerate(move_list):
-        try:
-            board.push_san(san)
-        except (
-            chess.InvalidMoveError,
-            chess.IllegalMoveError,
-            chess.AmbiguousMoveError,
-        ) as exc:
-            raise InvalidMoveError(
-                f"Invalid move at ply {i + 1}: '{san}' — {exc}"
-            ) from exc
-
+    for i, move in enumerate(move_objects):
+        board.push(move)
         result.append(
             {
                 "ply": i + 1,
                 "fen": board.fen(),
-                "next_move": move_list[i + 1] if i + 1 < len(move_list) else None,
+                "next_move": san_list[i + 1] if i + 1 < len(san_list) else None,
             }
         )
 
     return result
+
+
+def normalize_moves(start_fen: str, moves: str) -> str:
+    """
+    Validate *moves* (SAN or UCI) against *start_fen* and return them as a
+    canonical space-separated SAN string.
+
+    Raises InvalidMoveError if any move is illegal.
+    """
+    if not moves.strip():
+        return ""
+    board = chess.Board(start_fen)
+    san_tokens: list[str] = []
+    for i, token in enumerate(moves.split()):
+        try:
+            move = board.parse_san(token)
+            san_tokens.append(board.san(move))
+            board.push(move)
+        except (
+            chess.InvalidMoveError,
+            chess.IllegalMoveError,
+            chess.AmbiguousMoveError,
+            ValueError,
+        ) as exc:
+            raise InvalidMoveError(
+                f"Invalid move at ply {i + 1}: '{token}' — {exc}"
+            ) from exc
+    return " ".join(san_tokens)
 
 
 def get_final_fen(start_fen: str, moves: str) -> str:

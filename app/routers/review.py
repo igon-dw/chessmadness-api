@@ -7,6 +7,7 @@ from fastapi import APIRouter, HTTPException
 
 from app.database import get_db
 from app.schemas.review import ReviewItem, ReviewReport, ReviewReportResponse
+from app.services.skill_mastery import record_review_fail, record_review_success
 from app.services.sm2 import INITIAL_EASE_FACTOR, SM2State, apply_sm2
 
 logger = logging.getLogger(__name__)
@@ -44,7 +45,7 @@ async def get_today_reviews(theme_id: int | None = None) -> list[ReviewItem]:
             SELECT rp.id AS rp_id, rp.theme_line_id, rp.interval_days,
                    rp.repetitions, rp.ease_factor, rp.next_review,
                    tl.line_id, tl.theme_id, tl.note,
-                   l.moves, l.start_fen,
+                   l.moves, l.start_fen, l.final_fen,
                    th.name AS theme_name
             FROM review_progress rp
             JOIN theme_lines tl ON tl.id = rp.theme_line_id
@@ -60,7 +61,7 @@ async def get_today_reviews(theme_id: int | None = None) -> list[ReviewItem]:
             SELECT rp.id AS rp_id, rp.theme_line_id, rp.interval_days,
                    rp.repetitions, rp.ease_factor, rp.next_review,
                    tl.line_id, tl.theme_id, tl.note,
-                   l.moves, l.start_fen,
+                   l.moves, l.start_fen, l.final_fen,
                    th.name AS theme_name
             FROM review_progress rp
             JOIN theme_lines tl ON tl.id = rp.theme_line_id
@@ -82,6 +83,7 @@ async def get_today_reviews(theme_id: int | None = None) -> list[ReviewItem]:
             theme_name=r["theme_name"],
             moves=r["moves"],
             start_fen=r["start_fen"],
+            final_fen=r["final_fen"],
             note=r["note"],
             next_review=r["next_review"],
             interval_days=r["interval_days"],
@@ -161,6 +163,26 @@ async def report_review(body: ReviewReport) -> ReviewReportResponse:
             ),
         )
         await db.commit()
+
+        # Update skill_mastery for the skill block linked to this line (if any)
+        async with db.execute(
+            "SELECT tl.line_id FROM theme_lines tl WHERE tl.id = ?",
+            (body.theme_line_id,),
+        ) as cur:
+            tl_row = await cur.fetchone()
+
+        if tl_row is not None:
+            async with db.execute(
+                "SELECT id FROM skill_blocks WHERE line_id = ?",
+                (tl_row["line_id"],),
+            ) as cur:
+                sb_row = await cur.fetchone()
+
+            if sb_row is not None:
+                if body.grade >= 3:
+                    await record_review_success(db, sb_row["id"], body.grade)
+                else:
+                    await record_review_fail(db, sb_row["id"])
 
     return ReviewReportResponse(
         theme_line_id=body.theme_line_id,

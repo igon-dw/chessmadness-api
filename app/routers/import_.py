@@ -61,7 +61,9 @@ async def import_pgn(body: PgnImportRequest) -> PgnImportResponse:
             )
 
             try:
-                line_response = await register_line(db, line_create)
+                line_response = await register_line(
+                    db, line_create, origin_type="pgn_file"
+                )
                 created_lines.append(line_response)
             except InvalidMoveError as exc:
                 raise HTTPException(status_code=422, detail=str(exc)) from exc

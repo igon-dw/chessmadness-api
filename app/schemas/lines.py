@@ -36,6 +36,16 @@ class FenMoveCount(BaseModel):
     line_count: int
 
 
+class LineThemeUpdate(BaseModel):
+    """Mutable per-theme fields for a line (note and sort_order on theme_lines)."""
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    theme_id: int
+    note: str | None = None
+    sort_order: int | None = None
+
+
 class PgnImportRequest(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 

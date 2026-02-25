@@ -120,3 +120,68 @@ async def test_moves_from_fen(client):
     assert r.status_code == 200
     moves = {m["next_move"] for m in r.json()}
     assert "e4" in moves
+
+
+# ---------------------------------------------------------------------------
+# PATCH /lines/{id}
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_patch_line_note(client):
+    """PATCH /lines/{id} updates the note for a line in a theme."""
+    theme_id = await _make_theme(client)
+    r = await client.post("/lines", json={"moves": "e4 e5", "theme_id": theme_id})
+    line_id = r.json()["id"]
+
+    r = await client.patch(
+        f"/lines/{line_id}",
+        json={"theme_id": theme_id, "note": "My annotation"},
+    )
+    assert r.status_code == 200
+    assert r.json()["note"] == "My annotation"
+
+
+@pytest.mark.asyncio
+async def test_patch_line_sort_order(client):
+    """PATCH /lines/{id} updates sort_order for a line in a theme."""
+    theme_id = await _make_theme(client)
+    r = await client.post("/lines", json={"moves": "d4 d5", "theme_id": theme_id})
+    line_id = r.json()["id"]
+
+    r = await client.patch(
+        f"/lines/{line_id}",
+        json={"theme_id": theme_id, "sort_order": 42},
+    )
+    assert r.status_code == 200
+    assert r.json()["sort_order"] == 42
+
+
+@pytest.mark.asyncio
+async def test_patch_line_not_found(client):
+    """PATCH /lines/{id} returns 404 for unknown line."""
+    theme_id = await _make_theme(client)
+    r = await client.patch("/lines/9999", json={"theme_id": theme_id, "note": "x"})
+    assert r.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_patch_line_unknown_theme(client):
+    """PATCH /lines/{id} returns 404 if the line is not in the given theme."""
+    theme_id = await _make_theme(client)
+    r = await client.post("/lines", json={"moves": "e4", "theme_id": theme_id})
+    line_id = r.json()["id"]
+
+    r = await client.patch(f"/lines/{line_id}", json={"theme_id": 9999, "note": "x"})
+    assert r.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_patch_line_no_fields(client):
+    """PATCH /lines/{id} returns 422 when no update fields are provided."""
+    theme_id = await _make_theme(client)
+    r = await client.post("/lines", json={"moves": "e4", "theme_id": theme_id})
+    line_id = r.json()["id"]
+
+    r = await client.patch(f"/lines/{line_id}", json={"theme_id": theme_id})
+    assert r.status_code == 422

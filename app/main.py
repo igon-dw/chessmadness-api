@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app.database import init_db
-from app.routers import import_, lines, review, themes
+from app.routers import games, import_, lines, review, skills, themes
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -32,6 +32,8 @@ app.include_router(themes.router)
 app.include_router(lines.router)
 app.include_router(import_.router)
 app.include_router(review.router)
+app.include_router(skills.router)
+app.include_router(games.router)
 
 
 @app.get("/health")

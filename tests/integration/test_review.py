@@ -190,3 +190,64 @@ async def test_today_filter_includes_descendants(client):
     # All returned items must belong to parent or its descendants
     for item in r.json():
         assert item["theme_id"] in (parent_id, child_id)
+
+
+# ---------------------------------------------------------------------------
+# POST /review/report — skill_mastery side-effect
+# ---------------------------------------------------------------------------
+
+
+async def _make_skill_block(
+    client: Any, line_id: int, name: str = "Block"
+) -> dict[str, Any]:
+    r = await client.post("/skills", json={"line_id": line_id, "name": name})
+    assert r.status_code == 201
+    return r.json()  # type: ignore[no-any-return]
+
+
+@pytest.mark.asyncio
+async def test_report_success_updates_mastery_xp(client):
+    """A successful review (grade >= 3) grants XP to the linked skill block."""
+    theme_id = await _make_theme(client)
+    line = await _make_line(client, theme_id)
+    block = await _make_skill_block(client, line["id"])
+
+    r = await _report(client, line["theme_line_id"], grade=4)
+    assert r.status_code == 200
+
+    r = await client.get(f"/skills/{block['id']}")
+    assert r.status_code == 200
+    mastery = r.json()["mastery"]
+    assert mastery["xp"] == 4
+    assert mastery["streak"] == 1
+
+
+@pytest.mark.asyncio
+async def test_report_fail_resets_streak(client):
+    """A failed review (grade < 3) resets streak to 0 on the linked skill block."""
+    theme_id = await _make_theme(client)
+    line = await _make_line(client, theme_id)
+    block = await _make_skill_block(client, line["id"])
+
+    # First build up a streak
+    await _report(client, line["theme_line_id"], grade=5)
+    await _report(client, line["theme_line_id"], grade=5)
+
+    # Now fail
+    r = await _report(client, line["theme_line_id"], grade=1)
+    assert r.status_code == 200
+
+    r = await client.get(f"/skills/{block['id']}")
+    assert r.status_code == 200
+    mastery = r.json()["mastery"]
+    assert mastery["streak"] == 0
+
+
+@pytest.mark.asyncio
+async def test_report_no_skill_block_does_not_error(client):
+    """Reviewing a line with no linked skill block completes without error."""
+    theme_id = await _make_theme(client)
+    line = await _make_line(client, theme_id)
+
+    r = await _report(client, line["theme_line_id"], grade=5)
+    assert r.status_code == 200

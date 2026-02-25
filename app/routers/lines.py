@@ -10,6 +10,7 @@ from app.schemas.lines import (
     FenMoveCount,
     LineCreate,
     LineResponse,
+    LineThemeUpdate,
     LineWithThemeResponse,
 )
 from app.services.fen_index import InvalidMoveError
@@ -76,6 +77,82 @@ async def get_line(line_id: int) -> LineResponse:
     if row is None:
         raise HTTPException(status_code=404, detail=f"Line {line_id} not found")
     return _row_to_response(row)
+
+
+@router.patch("/{line_id}", response_model=LineWithThemeResponse)
+async def update_line_theme_metadata(
+    line_id: int, body: LineThemeUpdate
+) -> LineWithThemeResponse:
+    """
+    Update per-theme metadata (note and/or sort_order) for a line.
+
+    The request body must include the theme_id to identify which
+    theme_lines record to update. At least one of note or sort_order
+    must be provided.
+    """
+    async with get_db() as db:
+        # Verify line exists
+        async with db.execute("SELECT id FROM lines WHERE id = ?", (line_id,)) as cur:
+            if await cur.fetchone() is None:
+                raise HTTPException(status_code=404, detail=f"Line {line_id} not found")
+
+        # Verify theme_lines record exists
+        async with db.execute(
+            "SELECT id FROM theme_lines WHERE line_id = ? AND theme_id = ?",
+            (line_id, body.theme_id),
+        ) as cur:
+            if await cur.fetchone() is None:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Line {line_id} not found in theme {body.theme_id}",
+                )
+
+        # Build UPDATE dynamically — only fields provided
+        updates: list[str] = []
+        params: list[object] = []
+        if body.note is not None:
+            updates.append("note = ?")
+            params.append(body.note)
+        if body.sort_order is not None:
+            updates.append("sort_order = ?")
+            params.append(body.sort_order)
+
+        if not updates:
+            raise HTTPException(
+                status_code=422,
+                detail="At least one of note or sort_order must be provided",
+            )
+
+        params.extend([line_id, body.theme_id])
+        await db.execute(
+            f"UPDATE theme_lines SET {', '.join(updates)} "
+            "WHERE line_id = ? AND theme_id = ?",
+            params,
+        )
+        await db.commit()
+
+        async with db.execute(
+            "SELECT l.id, l.moves, l.move_count, l.start_fen, l.final_fen, l.created_at, "
+            "tl.theme_id, tl.sort_order, tl.note "
+            "FROM lines l "
+            "JOIN theme_lines tl ON tl.line_id = l.id "
+            "WHERE l.id = ? AND tl.theme_id = ?",
+            (line_id, body.theme_id),
+        ) as cur:
+            updated_row = await cur.fetchone()
+
+    assert updated_row is not None
+    return LineWithThemeResponse(
+        id=updated_row["id"],
+        moves=updated_row["moves"],
+        move_count=updated_row["move_count"],
+        start_fen=updated_row["start_fen"],
+        final_fen=updated_row["final_fen"],
+        created_at=updated_row["created_at"],
+        theme_id=updated_row["theme_id"],
+        sort_order=updated_row["sort_order"],
+        note=updated_row["note"],
+    )
 
 
 @router.delete("/{line_id}", status_code=204)

@@ -54,8 +54,8 @@ def test_import_pgn_basic(client):
     assert len(result["lines"]) == 1
 
     line = result["lines"][0]
-    # PGN parser returns moves in UCI format
-    assert line["moves"] == "e2e4 e7e5 g1f3 b8c6"
+    # PGN parser returns moves in SAN format
+    assert line["moves"] == "e4 e5 Nf3 Nc6"
     assert line["move_count"] == 4
 
 
